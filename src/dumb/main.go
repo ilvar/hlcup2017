@@ -235,6 +235,29 @@ func UsersHandlerGETVisits(request *http.Request, id string) (int, []byte) {
   visitsOut := make([]UserVisitOut, 0)
 
   params := request.URL.Query()
+
+  if p, ok := params["fromDate"]; ok {
+    p0, err := strconv.Atoi(p[0])
+    if err != nil || p0 == 0 {
+      println("User Visits bad fromDate: " + p[0] + " " + strconv.Itoa(len(p)))
+      return 400, []byte("")
+    }
+  }
+
+  if p, ok := params["toDate"]; ok {
+    p0, err := strconv.Atoi(p[0])
+    if err != nil || p0 == 0 {
+      return 400, []byte("")
+    }
+  }
+
+  if p, ok := params["toDistance"]; ok {
+    p0, err := strconv.Atoi(p[0])
+    if err != nil || p0 == 0 {
+      return 400, []byte("")
+    }
+  }
+
   for _, v := range visits {
     userId := strconv.Itoa(v.User)
     if userId != id {
@@ -244,21 +267,12 @@ func UsersHandlerGETVisits(request *http.Request, id string) (int, []byte) {
     shoudlInclude := true
 
     if p, ok := params["fromDate"]; ok {
-      p0, err := strconv.Atoi(p[0])
-      if err != nil || p0 == 0 {
-        println("User Visits bad fromDate: " + p[0] + " " + strconv.Itoa(len(p)))
-        return 400, []byte("")
-      }
-
+      p0, _ := strconv.Atoi(p[0])
       shoudlInclude = shoudlInclude && v.VisitedAt > int64(p0)
     }
 
     if p, ok := params["toDate"]; ok {
-      p0, err := strconv.Atoi(p[0])
-      if err != nil || p0 == 0 {
-        return 400, []byte("")
-      }
-
+      p0, _ := strconv.Atoi(p[0])
       shoudlInclude = shoudlInclude && v.VisitedAt < int64(p0)
     }
 
@@ -268,10 +282,7 @@ func UsersHandlerGETVisits(request *http.Request, id string) (int, []byte) {
     }
 
     if p, ok := params["toDistance"]; ok {
-      p0, err := strconv.Atoi(p[0])
-      if err != nil || p0 == 0 {
-        return 400, []byte("")
-      }
+      p0, _ := strconv.Atoi(p[0])
       shoudlInclude = shoudlInclude && l.Distance < p0
     }
 
@@ -376,6 +387,42 @@ func LocationsHandlerGETAvg(request *http.Request, id string) (int, []byte) {
   params := request.URL.Query()
   total := 0
   cnt := 0
+
+  if p, ok := params["fromDate"]; ok {
+    p0, err := strconv.Atoi(p[0])
+    if err != nil || p0 == 0 {
+      return 400, []byte("")
+    }
+  }
+
+  if p, ok := params["toDate"]; ok {
+    p0, err := strconv.Atoi(p[0])
+    if err != nil || p0 == 0 {
+      return 400, []byte("")
+    }
+  }
+
+  if p, ok := params["fromAge"]; ok {
+    p0, err := strconv.Atoi(p[0])
+    if err != nil || p0 == 0 {
+      return 400, []byte("")
+    }
+  }
+
+  if p, ok := params["toAge"]; ok {
+    p0, err := strconv.Atoi(p[0])
+    if err != nil || p0 == 0 {
+      return 400, []byte("")
+    }
+  }
+
+  if p, ok := params["gender"]; ok {
+    if p[0] != "m" && p[0] != "f" {
+      return 400, []byte("")
+    }
+  }
+
+
   for _, v := range visits {
     if strconv.Itoa(v.Location) != id {
       continue
@@ -384,18 +431,12 @@ func LocationsHandlerGETAvg(request *http.Request, id string) (int, []byte) {
     shoudlInclude := true
 
     if p, ok := params["fromDate"]; ok {
-      p0, err := strconv.Atoi(p[0])
-      if err != nil || p0 == 0 {
-        return 400, []byte("")
-      }
+      p0, _ := strconv.Atoi(p[0])
       shoudlInclude = shoudlInclude && v.VisitedAt > int64(p0)
     }
 
     if p, ok := params["toDate"]; ok {
-      p0, err := strconv.Atoi(p[0])
-      if err != nil || p0 == 0 {
-        return 400, []byte("")
-      }
+      p0, _ := strconv.Atoi(p[0])
       shoudlInclude = shoudlInclude && v.VisitedAt < int64(p0)
     }
 
@@ -403,28 +444,18 @@ func LocationsHandlerGETAvg(request *http.Request, id string) (int, []byte) {
     age := Age(time.Unix(u.BirthDate, 0))
 
     if p, ok := params["fromAge"]; ok {
-      p0, err := strconv.Atoi(p[0])
-      if err != nil || p0 == 0 {
-        return 400, []byte("")
-      }
+      p0, _ := strconv.Atoi(p[0])
 
       shoudlInclude = shoudlInclude && age >= int(p0)
     }
 
     if p, ok := params["toAge"]; ok {
-      p0, err := strconv.Atoi(p[0])
-      if err != nil || p0 == 0 {
-        return 400, []byte("")
-      }
+      p0, _ := strconv.Atoi(p[0])
 
       shoudlInclude = shoudlInclude && age < int(p0)
     }
 
     if p, ok := params["gender"]; ok {
-      if p[0] != "m" && p[0] != "f" {
-        return 400, []byte("")
-      }
-
       shoudlInclude = shoudlInclude && u.Gender == p[0]
     }
 

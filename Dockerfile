@@ -21,8 +21,6 @@ ADD src/dumb/main.go go/src/dumb
 ADD src/dumb/age.go go/src/dumb
 ADD src/dumb/checkmail.go go/src/dumb
 
-RUN go get -t gopkg.in/guregu/null.v3
-
 # Компилируем и устанавливаем наш сервер
 RUN go build dumb && go install dumb
 
