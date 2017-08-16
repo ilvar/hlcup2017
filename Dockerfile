@@ -28,5 +28,4 @@ RUN go build dumb && go install dumb
 EXPOSE 80
 
 # Запускаем наш сервер
-ENV GOMAXPROCS=1
 CMD ./go/bin/dumb

@@ -117,8 +117,6 @@ var hlLocations = make(map[string]string)
 var hlLocationsData = make(map[string]Location)
 var hlVisits = make(map[string]string)
 var hlVisitsData = make(map[string]Visit)
-//var hlVisitsByUser = make(map[string][]UserVisit)
-//var hlVisitsByLocation = make(map[string][]UserVisit)
 
 // TODO: Validate unique emails
 // TODO: Chain update UVs on Location change
@@ -476,24 +474,6 @@ func LocationsHandlerGET(id string) (int, []byte) {
   return 200, []byte(hlLocations[id])
 }
 
-func VisitInvalidate(v Visit) {
-  return
-
-  //userId := strconv.Itoa(v.User)
-  //user := hlUsersData[userId]
-  //locId := strconv.Itoa(v.Location)
-  //loc := hlLocationsData[locId]
-  //userAge := Age(time.Unix(user.BirthDate, 0))
-  //uv := UserVisit{v.ID, loc.Place, loc.Country, loc.Distance, user.Gender, userAge, v.VisitedAt, v.Mark}
-  //
-  //hlVisitsByUser[userId] = append(hlVisitsByUser[userId], uv)
-  //sort.Sort(UserVisitsType(hlVisitsByUser[userId]))
-  //
-  //hlVisitsByLocation[locId] = append(hlVisitsByLocation[locId], uv)
-
-  // TODO: user/location change
-}
-
 func VisitsHandlerPOST(request *http.Request, id string) (int, []byte) {
   body, _ := ioutil.ReadAll(request.Body)
   request.Body = ioutil.NopCloser(bytes.NewBuffer(body))
@@ -550,7 +530,6 @@ func VisitsHandlerPOST(request *http.Request, id string) (int, []byte) {
     v.ID, _ = strconv.Atoi(id)
     hlVisits[id] = toJson(v)
     hlVisitsData[id] = v
-    VisitInvalidate(v)
     return 200, []byte("{}")
   } else {
     newId := strconv.Itoa(v.ID)
@@ -565,7 +544,6 @@ func VisitsHandlerPOST(request *http.Request, id string) (int, []byte) {
     } else {
       hlVisits[newId] = toJson(v)
       hlVisitsData[newId] = v
-      VisitInvalidate(v)
       return 200, []byte("{}")
     }
   }
@@ -654,20 +632,9 @@ func GenericHandler(writer http.ResponseWriter, request *http.Request) {
   writer.Write(body)
 }
 
-func main () {
-  println("Loading zip...")
+func LoadUsers(r *zip.ReadCloser) {
+  start := time.Now()
 
-  // Open a zip archive for reading.
-  r, err := zip.OpenReader("/tmp/data/data.zip")
-  if err != nil {
-    log.Fatal(err)
-  }
-  defer r.Close()
-
-  println("Loading data...")
-
-  // Iterate through the files in the archive,
-  // printing some of their contents.
   for _, f := range r.File {
     if strings.HasPrefix(f.Name, "users_") {
       rc, err := f.Open()
@@ -693,6 +660,13 @@ func main () {
     }
   }
 
+  elapsed := time.Since(start)
+  log.Printf("LoadUsers took %s", elapsed)
+}
+
+func LoadLocations(r *zip.ReadCloser) {
+  start := time.Now()
+
   for _, f := range r.File {
     if strings.HasPrefix(f.Name, "locations_") {
       rc, err := f.Open()
@@ -716,6 +690,13 @@ func main () {
     }
   }
 
+  elapsed := time.Since(start)
+  log.Printf("LoadLocations took %s", elapsed)
+}
+
+func LoadVisits(r *zip.ReadCloser) {
+  start := time.Now()
+
   for _, f := range r.File {
     if strings.HasPrefix(f.Name, "visits_") {
       rc, err := f.Open()
@@ -733,13 +714,34 @@ func main () {
       for _, v := range visits.Visits {
         hlVisits[strconv.Itoa(v.ID)] = toJson(v)
         hlVisitsData[strconv.Itoa(v.ID)] = v
-
-        VisitInvalidate(v)
       }
 
       println("Loaded visits: " + strconv.Itoa(len(visits.Visits)))
     }
   }
+
+  elapsed := time.Since(start)
+  log.Printf("LoadVisits took %s", elapsed)
+}
+
+func main () {
+  println("Loading zip...")
+
+  // Open a zip archive for reading.
+  r, err := zip.OpenReader("/tmp/data/data.zip")
+  if err != nil {
+    log.Fatal(err)
+  }
+  defer r.Close()
+
+  println("Loading data...")
+
+  // Iterate through the files in the archive,
+  // printing some of their contents.
+  go LoadUsers(r)
+  go LoadLocations(r)
+  go LoadVisits(r)
+
   http.HandleFunc("/", GenericHandler)
 
   port := os.Getenv("PORT")
