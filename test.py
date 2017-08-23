@@ -105,3 +105,45 @@ for (url, handler, truth) in tests_get_params:
     else:
         clint.textui.puts(clint.textui.colored.red("GET  %s: %s != %s" % (url, result, truth)))
 
+clint.textui.puts(clint.textui.colored.blue("========================= Visit POSTs =============================="))
+
+data = requests.get("http://localhost:8080/users/46/visits").json()['visits']
+clint.textui.puts(clint.textui.colored.green("BEFORE user visits %s %s" % (len(data), sum([v['mark'] for v in data]))))
+
+data = requests.get("http://localhost:8080/locations/64/avg").json()['avg']
+clint.textui.puts(clint.textui.colored.green("BEFORE loc avg %s" % data))
+
+data = requests.post("http://localhost:8080/visits/123", """{"mark": 1}""")
+clint.textui.puts(clint.textui.colored.green("UPDATE mark"))
+
+data = requests.get("http://localhost:8080/users/46/visits").json()['visits']
+clint.textui.puts(clint.textui.colored.green("MARK user visits %s %s" % (len(data), sum([v['mark'] for v in data]))))
+
+data = requests.get("http://localhost:8080/locations/64/avg").json()['avg']
+clint.textui.puts(clint.textui.colored.green("MARK loc avg %s" % data))
+
+data = requests.post("http://localhost:8080/visits/123", """{"location": 111}""")
+clint.textui.puts(clint.textui.colored.green("UPDATE location"))
+
+data = requests.get("http://localhost:8080/users/46/visits").json()['visits']
+clint.textui.puts(clint.textui.colored.green("LOCATION user visits %s %s" % (len(data), sum([v['mark'] for v in data]))))
+
+data = requests.get("http://localhost:8080/locations/64/avg").json()['avg']
+clint.textui.puts(clint.textui.colored.green("LOCATION loc avg %s" % data))
+
+data = requests.get("http://localhost:8080/users/111/visits").json()['visits']
+clint.textui.puts(clint.textui.colored.green("USER 111 visits %s %s" % (len(data), sum([v['mark'] for v in data]))))
+
+data = requests.post("http://localhost:8080/visits/123", """{"user": 111}""")
+clint.textui.puts(clint.textui.colored.green("UPDATE user"))
+
+data = requests.get("http://localhost:8080/users/46/visits").json()['visits']
+clint.textui.puts(clint.textui.colored.green("USER user visits %s %s" % (len(data), sum([v['mark'] for v in data]))))
+
+data = requests.get("http://localhost:8080/users/111/visits").json()['visits']
+clint.textui.puts(clint.textui.colored.green("USER 111 visits %s %s" % (len(data), sum([v['mark'] for v in data]))))
+
+data = requests.get("http://localhost:8080/locations/64/avg").json()['avg']
+clint.textui.puts(clint.textui.colored.green("USER loc avg %s" % data))
+
+

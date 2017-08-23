@@ -5,7 +5,7 @@ WORKDIR /root
 
 # Устанавливаем wget и скачиваем Go
 RUN apt-get update && \
-    apt-get install -y wget && \
+    apt-get install -y wget git && \
     wget https://storage.googleapis.com/golang/go1.8.3.linux-amd64.tar.gz
 
 # Устанавливаем Go, создаем workspace и папку проекта
@@ -15,6 +15,9 @@ RUN tar -C /usr/local -xzf go1.8.3.linux-amd64.tar.gz && \
 
 # Задаем переменные окружения для работы Go
 ENV PATH=${PATH}:/usr/local/go/bin GOROOT=/usr/local/go GOPATH=/root/go
+
+# fasthttp
+RUN go get -u github.com/valyala/fasthttp
 
 # Копируем наш исходный main.go внутрь контейнера, в папку go/src/dumb
 ADD src/dumb/main.go go/src/dumb
@@ -28,4 +31,5 @@ RUN go build dumb && go install dumb
 EXPOSE 80
 
 # Запускаем наш сервер
+ENV GOMAXPROCS=4
 CMD ./go/bin/dumb
