@@ -111,15 +111,12 @@ func toJson(p interface{}) string {
   return string(bytes)
 }
 
-var hlUsers = make(map[string][]byte)
-var hlUsersData = make(map[string]User)
-var hlUsersEmails = make(map[string]string)
-var hlLocations = make(map[string][]byte)
-var hlLocationsData = make(map[string]Location)
-var hlVisits = make(map[string][]byte)
-var hlVisitsData = make(map[string]*Visit)
-var hlVisitsByUser = make(map[string][]*Visit)
-var hlVisitsByLoc = make(map[string][]*Visit)
+var hlUsersData = make(map[int]User)
+var hlUsersEmails = make(map[string]int)
+var hlLocationsData = make(map[int]Location)
+var hlVisitsData = make(map[int]*Visit)
+var hlVisitsByUser = make(map[int][]int)
+var hlVisitsByLoc = make(map[int][]int)
 
 var hlUsersMutex sync.Mutex
 var hlLocationsMutex sync.Mutex
@@ -129,7 +126,7 @@ var hlVisitsByLocMutex sync.Mutex
 
 var emptyResponse = []byte("")
 
-func UserValidate(u User, id string) (bool) {
+func UserValidate(u User, id int) (bool) {
   if u.Gender != "" && u.Gender != "m" && u.Gender != "f" {
     // Sorry LGBTQ
     return false
@@ -161,7 +158,7 @@ func UserValidate(u User, id string) (bool) {
   return true
 }
 
-func UsersHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
+func UsersHandlerPOST(ctx *fasthttp.RequestCtx, id int) (int, []byte) {
   body := ctx.PostBody()
 
   if strings.Contains(string(body), "null") { // TODO: hack :(
@@ -175,7 +172,7 @@ func UsersHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
     return 400, emptyResponse
   }
 
-  if id != "new" {
+  if id != -1 {
     existingUser := hlUsersData[id]
     if u.BirthDate == 0 { u.BirthDate = existingUser.BirthDate }
     if u.Gender == "" { u.Gender = existingUser.Gender }
@@ -185,31 +182,28 @@ func UsersHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
   }
 
   if UserValidate(u, id) {
-    if id != "new" {
+    if id != -1 {
       if u.ID != 0 {
         return 400, emptyResponse
       }
-      u.ID, _ = strconv.Atoi(id)
+      u.ID = id
 
       hlUsersMutex.Lock()
-      hlUsers[id] = []byte(toJson(u))
       hlUsersData[id] = u
       hlUsersEmails[u.Email] = id
       hlUsersMutex.Unlock()
       return 200, []byte("{}")
     } else {
-      newId := strconv.Itoa(u.ID)
-      if newId == "0" {
+      if u.ID == 0 {
         return 400, emptyResponse
       }
 
-      if _, ok := hlUsers[newId]; ok {
+      if _, ok := hlUsersData[u.ID]; ok {
         return 400, emptyResponse
       } else {
         hlUsersMutex.Lock()
-        hlUsers[newId] = []byte(toJson(u))
-        hlUsersData[newId] = u
-        hlUsersEmails[u.Email] = newId
+        hlUsersData[u.ID] = u
+        hlUsersEmails[u.Email] = u.ID
         hlUsersMutex.Unlock()
         return 200, []byte("{}")
       }
@@ -219,8 +213,8 @@ func UsersHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
   }
 }
 
-func UsersHandlerGETVisits(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
-  visits := hlVisitsByUser[id]
+func UsersHandlerGETVisits(ctx *fasthttp.RequestCtx, uid int) (int, []byte) {
+  visitIds := hlVisitsByUser[uid]
   visitsOut := make([]UserVisitOut, 0)
 
   params := ctx.QueryArgs()
@@ -246,8 +240,8 @@ func UsersHandlerGETVisits(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
     }
   }
 
-  for _, v0 := range visits {
-    v := *v0
+  for _, vID := range visitIds {
+    v := hlVisitsData[vID]
 
     shoudlInclude := true
 
@@ -261,7 +255,7 @@ func UsersHandlerGETVisits(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
       shoudlInclude = shoudlInclude && v.VisitedAt < int64(p0)
     }
 
-    l := hlLocationsData[strconv.Itoa(v.Location)]
+    l := hlLocationsData[v.Location]
     if shoudlInclude && params.Has("country") {
       p0 := string(params.Peek("country"))
       shoudlInclude = shoudlInclude && l.Country == p0
@@ -270,12 +264,6 @@ func UsersHandlerGETVisits(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
     if shoudlInclude && params.Has("toDistance") {
       p0, _ := strconv.Atoi(string(params.Peek("toDistance")))
       shoudlInclude = shoudlInclude && l.Distance < p0
-    }
-
-    if id == "299" {
-      println("shoudlInclude")
-      println(toJson(v))
-      println(shoudlInclude)
     }
 
     if shoudlInclude {
@@ -290,7 +278,7 @@ func UsersHandlerGETVisits(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
   return 200, []byte(toJson(vos))
 }
 
-func LocationsHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
+func LocationsHandlerPOST(ctx *fasthttp.RequestCtx, id int) (int, []byte) {
   body := ctx.PostBody()
 
   if strings.Contains(string(body), "null") { // TODO: hack :(
@@ -304,7 +292,7 @@ func LocationsHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
     return 400, emptyResponse
   }
 
-  if id != "new" {
+  if id != -1 {
     existingLoc := hlLocationsData[id]
     if l.Distance == 0 { l.Distance = existingLoc.Distance }
     if l.Country == "" { l.Country = existingLoc.Country }
@@ -320,37 +308,35 @@ func LocationsHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
     return 400, emptyResponse
   }
 
-  if id != "new" {
+  if id != -1 {
     if l.ID != 0 {
       return 400, emptyResponse
     }
-    l.ID, _ = strconv.Atoi(id)
+    l.ID = id
 
     hlLocationsMutex.Lock()
     hlLocationsData[id] = l
-    hlLocations[id] = []byte(toJson(l))
     hlLocationsMutex.Unlock()
     return 200, []byte("{}")
   } else {
-    locID := strconv.Itoa(l.ID)
-    if locID == "0" {
+    locID := l.ID
+    if locID == 0 {
       return 400, emptyResponse
     }
 
-    if _, ok := hlLocations[locID]; ok {
+    if _, ok := hlLocationsData[locID]; ok {
       return 400, emptyResponse
     } else {
       hlLocationsMutex.Lock()
       hlLocationsData[locID] = l
-      hlLocations[locID] = []byte(toJson(l))
       hlLocationsMutex.Unlock()
       return 200, []byte("{}")
     }
   }
 }
 
-func LocationsHandlerGETAvg(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
-  visits := hlVisitsByLoc[id]
+func LocationsHandlerGETAvg(ctx *fasthttp.RequestCtx, lid int) (int, []byte) {
+  visitIDs := hlVisitsByLoc[lid]
 
   params := ctx.QueryArgs()
   total := 0
@@ -392,12 +378,8 @@ func LocationsHandlerGETAvg(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
   }
 
 
-  for _, v0 := range visits {
-    var v Visit = *v0
-
-    if strconv.Itoa(v.Location) != id {
-      continue
-    }
+  for _, vID := range visitIDs {
+    v := hlVisitsData[vID]
 
     shoudlInclude := true
 
@@ -411,7 +393,7 @@ func LocationsHandlerGETAvg(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
       shoudlInclude = shoudlInclude && v.VisitedAt < int64(p0)
     }
 
-    u := hlUsersData[strconv.Itoa(v.User)]
+    u := hlUsersData[v.User]
     age := Age(time.Unix(u.BirthDate, 0))
 
     if params.Has("fromAge") {
@@ -437,14 +419,16 @@ func LocationsHandlerGETAvg(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
     }
   }
 
-  avg := float64(total) / float64(cnt)
+  var avg float64
   if cnt == 0 {
     avg = 0.0
+  } else {
+    avg = (float64(total) / float64(cnt)) + 0.00005
   }
   return 200, []byte("{\"avg\": " + strconv.FormatFloat(avg, 'f', 5, 64) + "}")
 }
 
-func VisitsHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
+func VisitsHandlerPOST(ctx *fasthttp.RequestCtx, id int) (int, []byte) {
   body := ctx.PostBody()
 
   if strings.Contains(string(body), "null") { // TODO: hack :(
@@ -454,25 +438,18 @@ func VisitsHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
   var v Visit
   err := json.Unmarshal(body, &v)
 
-  if id == "10372" {
-    println("ID 10372 update Visit")
-    println(string(body))
-  }
-
   if err != nil {
     return 400, emptyResponse
   }
 
   if v.Location > 0 {
-    if _, ok := hlLocations[strconv.Itoa(v.Location)]; !ok {
+    if _, ok := hlLocationsData[v.Location]; !ok {
       return 400, emptyResponse
     }
   }
 
   if v.User > 0 {
-    if _, ok := hlUsers[strconv.Itoa(v.User)]; !ok {
-      println("Visit " + id + " wrong User: " + strconv.Itoa(v.User))
-
+    if _, ok := hlUsersData[v.User]; !ok {
       return 400, emptyResponse
     }
   }
@@ -481,97 +458,66 @@ func VisitsHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
     return 400, emptyResponse
   }
 
-  if v.Mark == nil && id == "new" {
+  if v.Mark == nil && id == -1 {
     return 400, emptyResponse
   }
 
-  if id != "new" {
+  if id != -1 {
     if v.ID != 0 {
       return 400, emptyResponse
     }
 
     existingVisit := hlVisitsData[id]
-    if id == "10372" {
-      println("ID 10372 ptr")
-      println(existingVisit)
-    }
 
     if v.VisitedAt != 0 && v.VisitedAt != existingVisit.VisitedAt { existingVisit.VisitedAt = v.VisitedAt }
 
     if v.Mark != nil && *v.Mark != *existingVisit.Mark { *existingVisit.Mark = *v.Mark }
 
     if v.Location != 0 && v.Location != existingVisit.Location {
-      if id == "10372" {
-        println("ID 10372 update Location")
-        println(v.Location)
-        println(existingVisit.Location)
-      }
-
       removeFromLocations(existingVisit.Location, existingVisit)
 
-      newLoc := strconv.Itoa(v.Location)
+      newLoc := v.Location
       existingVisit.Location = v.Location
 
       hlVisitsByLocMutex.Lock()
-      hlVisitsByLoc[newLoc] = append(hlVisitsByLoc[newLoc], existingVisit)
+      hlVisitsByLoc[newLoc] = append(hlVisitsByLoc[newLoc], existingVisit.ID)
       hlVisitsByLocMutex.Unlock()
     }
     if v.User != 0 && v.User != existingVisit.User {
-      if id == "10372" {
-        println("ID 10372 update user")
-        println(v.User)
-        println(existingVisit.User)
-      }
-
       removeFromUsers(existingVisit.User, existingVisit)
 
-      newUser := strconv.Itoa(v.User)
+      newUser := v.User
       existingVisit.User = v.User
 
       hlVisitsByUserMutex.Lock()
-      hlVisitsByUser[newUser] = append(hlVisitsByUser[newUser], existingVisit)
+      hlVisitsByUser[newUser] = append(hlVisitsByUser[newUser], existingVisit.ID)
       hlVisitsByUserMutex.Unlock()
     }
 
-    if id == "10372" {
-      println("ID 10372 updated")
-      println(toJson(existingVisit))
-      println(existingVisit)
-    }
-
-    hlVisits[id] = []byte(toJson(existingVisit))
     hlVisitsData[id] = existingVisit
 
     return 200, []byte("{}")
   } else {
-    newId := strconv.Itoa(v.ID)
-    if newId == "0" {
-      println("Visit " + newId + " no ID")
+    newId := v.ID
+    if newId == 0 {
       return 400, emptyResponse
     }
 
-    if _, ok := hlVisits[newId]; ok {
-      println("Visit " + id + " existing ID: " + newId)
+    if _, ok := hlVisitsData[newId]; ok {
       return 400, emptyResponse
     } else {
-      if v.User == 299 {
-        println("User 299 new Visit")
-        println(string(body))
-      }
-
       hlVisitsMutex.Lock()
-      hlVisits[newId] = []byte(toJson(v))
       hlVisitsData[newId] = &v
       hlVisitsMutex.Unlock()
 
-      userId := strconv.Itoa(v.User)
+      userId := v.User
       hlVisitsByUserMutex.Lock()
-      hlVisitsByUser[userId] = append(hlVisitsByUser[userId], &v)
+      hlVisitsByUser[userId] = append(hlVisitsByUser[userId], newId)
       hlVisitsByUserMutex.Unlock()
 
-      locId := strconv.Itoa(v.Location)
+      locId := v.Location
       hlVisitsByLocMutex.Lock()
-      hlVisitsByLoc[locId] = append(hlVisitsByLoc[locId], &v)
+      hlVisitsByLoc[locId] = append(hlVisitsByLoc[locId], newId)
       hlVisitsByLocMutex.Unlock()
       return 200, []byte("{}")
     }
@@ -581,21 +527,18 @@ func VisitsHandlerPOST(ctx *fasthttp.RequestCtx, id string) (int, []byte) {
 func removeFromLocations(oldId int, existingVisit *Visit) {
   hlVisitsByLocMutex.Lock()
 
-  oldLoc := strconv.Itoa(oldId)
-
   var oldIdx int = -1
 
-  for i, v0 := range hlVisitsByLoc[oldLoc] {
-    if v0.ID == existingVisit.ID {
+  for i, vID := range hlVisitsByLoc[oldId] {
+    if vID == existingVisit.ID {
       oldIdx = i
       break
     }
   }
 
   if oldIdx > -1 {
-    hlVisitsByLoc[oldLoc][oldIdx] = hlVisitsByLoc[oldLoc][len(hlVisitsByLoc[oldLoc])-1]
-    hlVisitsByLoc[oldLoc][len(hlVisitsByLoc[oldLoc])-1] = nil
-    hlVisitsByLoc[oldLoc] = hlVisitsByLoc[oldLoc][:len(hlVisitsByLoc[oldLoc])-1]
+    hlVisitsByLoc[oldId][oldIdx] = hlVisitsByLoc[oldId][len(hlVisitsByLoc[oldId])-1]
+    hlVisitsByLoc[oldId] = hlVisitsByLoc[oldId][:len(hlVisitsByLoc[oldId])-1]
   }
 
   hlVisitsByLocMutex.Unlock()
@@ -604,21 +547,18 @@ func removeFromLocations(oldId int, existingVisit *Visit) {
 func removeFromUsers(oldId int, existingVisit *Visit) {
   hlVisitsByUserMutex.Lock()
 
-  oldUser := strconv.Itoa(oldId)
-
   var oldIdx int = -1
 
-  for i, v0 := range hlVisitsByUser[oldUser] {
-    if v0.ID == existingVisit.ID {
+  for i, vID := range hlVisitsByUser[oldId] {
+    if vID == existingVisit.ID {
       oldIdx = i
       break
     }
   }
 
   if oldIdx > -1 {
-    hlVisitsByUser[oldUser][oldIdx] = hlVisitsByUser[oldUser][len(hlVisitsByUser[oldUser])-1]
-    hlVisitsByUser[oldUser][len(hlVisitsByUser[oldUser])-1] = nil
-    hlVisitsByUser[oldUser] = hlVisitsByUser[oldUser][:len(hlVisitsByUser[oldUser])-1]
+    hlVisitsByUser[oldId][oldIdx] = hlVisitsByUser[oldId][len(hlVisitsByUser[oldId])-1]
+    hlVisitsByUser[oldId] = hlVisitsByUser[oldId][:len(hlVisitsByUser[oldId])-1]
   }
 
   hlVisitsByUserMutex.Unlock()
@@ -635,64 +575,70 @@ func GenericHandler(ctx *fasthttp.RequestCtx) {
   } else {
     objType := pathBits[1]
     sid := pathBits[2]
-    _, err := strconv.Atoi(sid)
+    iid, err := strconv.Atoi(sid)
     if err != nil {
       if objType == "users" && sid == "new" && methodPost {
-        status, body = UsersHandlerPOST(ctx, sid)
+        status, body = UsersHandlerPOST(ctx, -1)
       } else if objType == "locations" && sid == "new" && methodPost {
-        status, body = LocationsHandlerPOST(ctx, sid)
+        status, body = LocationsHandlerPOST(ctx, -1)
       } else if objType == "visits" && sid == "new" && methodPost {
-        status, body = VisitsHandlerPOST(ctx, sid)
+        status, body = VisitsHandlerPOST(ctx, -1)
       } else {
         status, body = 404, emptyResponse
       }
 
     } else {
       if objType == "users" {
-        if u, ok := hlUsers[sid]; ok {
+        if u, ok := hlUsersData[iid]; ok {
           if len(pathBits) == 4 {
             if pathBits[3] == "visits" {
-              status, body = UsersHandlerGETVisits(ctx, sid)
+              status, body = UsersHandlerGETVisits(ctx, iid)
             } else {
               status, body = 404, emptyResponse
             }
           } else {
             if methodPost {
-              status, body = UsersHandlerPOST(ctx, sid)
+              hlUsersMutex.Lock()
+              status, body = UsersHandlerPOST(ctx, iid)
+              hlUsersMutex.Unlock()
             } else {
-              status, body = 200, u
+              status, body = 200, []byte(toJson(u))
             }
           }
         } else {
           status, body = 404, emptyResponse
         }
       } else if objType == "locations" {
-        if l, ok := hlLocations[sid]; ok {
+        if l, ok := hlLocationsData[iid]; ok {
           if len(pathBits) == 4 {
             if pathBits[3] == "avg" {
-              status, body = LocationsHandlerGETAvg(ctx, sid)
+              status, body = LocationsHandlerGETAvg(ctx, iid)
             } else {
               status, body = 404, emptyResponse
             }
           } else {
             if methodPost {
-              status, body = LocationsHandlerPOST(ctx, sid)
+              hlLocationsMutex.Lock()
+              status, body = LocationsHandlerPOST(ctx, iid)
+              hlLocationsMutex.Unlock()
             } else {
-              status, body = 200, l
+              status, body = 200, []byte(toJson(l))
             }
           }
         } else {
           status, body = 404, emptyResponse
         }
       } else if objType == "visits" {
-        if v, ok := hlVisits[sid]; ok {
+        if v, ok := hlVisitsData[iid]; ok {
           if len(pathBits) == 4 {
             status, body = 404, emptyResponse
           } else {
             if methodPost {
-              status, body = VisitsHandlerPOST(ctx, sid)
+              hlVisitsMutex.Lock()
+              status, body = VisitsHandlerPOST(ctx, iid)
+              hlVisitsMutex.Unlock()
             } else {
-              status, body = 200, v
+              status, body = 200, []byte(toJson(v))
             }
         }
         } else {
@@ -728,8 +674,7 @@ func LoadUsers(r *zip.ReadCloser) {
       rc.Close()
 
       for _, v := range users.Users {
-        id := strconv.Itoa(v.ID)
-        hlUsers[id] = []byte(toJson(v))
+        id := v.ID
         hlUsersData[id] = v
         hlUsersEmails[v.Email] = id
       }
@@ -760,8 +705,7 @@ func LoadLocations(r *zip.ReadCloser) {
       rc.Close()
 
       for _, v := range locations.Locations {
-        hlLocationsData[strconv.Itoa(v.ID)] = v
-        hlLocations[strconv.Itoa(v.ID)] = []byte(toJson(v))
+        hlLocationsData[v.ID] = v
       }
 
       println("Loaded locations: " + strconv.Itoa(len(locations.Locations)))
@@ -789,15 +733,14 @@ func LoadVisitsFile(f *zip.File, start time.Time) {
   for _, v0 := range visits.Visits {
     var v Visit = v0
 
-    vID := strconv.Itoa(v.ID)
-    hlVisits[vID] = []byte(toJson(v))
+    vID := v.ID
     hlVisitsData[vID] = &v
 
-    userId := strconv.Itoa(v.User)
-    hlVisitsByUser[userId] = append(hlVisitsByUser[userId], &v)
+    userId := v.User
+    hlVisitsByUser[userId] = append(hlVisitsByUser[userId], vID)
 
-    locId := strconv.Itoa(v.Location)
-    hlVisitsByLoc[locId] = append(hlVisitsByLoc[locId], &v)
+    locId := v.Location
+    hlVisitsByLoc[locId] = append(hlVisitsByLoc[locId], vID)
   }
   hlVisitsMutex.Unlock()
 
