@@ -13,6 +13,7 @@ import (
   "time"
   "github.com/valyala/fasthttp"
   "sync"
+  "runtime"
 )
 
 
@@ -771,43 +772,54 @@ func LoadLocations(r *zip.ReadCloser) {
   log.Printf("LoadLocations took %s", elapsed)
 }
 
+func LoadVisitsFile(f *zip.File, start time.Time) {
+  rc, err := f.Open()
+  if err != nil {
+    log.Fatal(err)
+  }
+  byteValue, err := ioutil.ReadAll(rc)
+  if err != nil {
+    log.Fatal(err)
+  }
+  var visits Visits
+  json.Unmarshal(byteValue, &visits)
+  rc.Close()
+
+  hlVisitsMutex.Lock()
+  for _, v0 := range visits.Visits {
+    var v Visit = v0
+
+    vID := strconv.Itoa(v.ID)
+    hlVisits[vID] = []byte(toJson(v))
+    hlVisitsData[vID] = &v
+
+    userId := strconv.Itoa(v.User)
+    hlVisitsByUser[userId] = append(hlVisitsByUser[userId], &v)
+
+    locId := strconv.Itoa(v.Location)
+    hlVisitsByLoc[locId] = append(hlVisitsByLoc[locId], &v)
+  }
+  hlVisitsMutex.Unlock()
+
+  elapsed := time.Since(start)
+
+  runtime.GC()
+
+  var ms runtime.MemStats
+  runtime.ReadMemStats(&ms)
+
+  log.Printf("LoadVisits took %s for %d visits", elapsed, len(visits.Visits))
+  log.Printf("Memory: Heap %d mb Total %d mb", ms.Alloc / 1024 / 1024, ms.Sys / 1024 / 1024)
+}
+
 func LoadVisits(r *zip.ReadCloser) {
   start := time.Now()
 
   for _, f := range r.File {
     if strings.HasPrefix(f.Name, "visits_") {
-      rc, err := f.Open()
-      if err != nil {
-        log.Fatal(err)
-      }
-      byteValue, err := ioutil.ReadAll(rc)
-      if err != nil {
-        log.Fatal(err)
-      }
-      var visits Visits
-      json.Unmarshal(byteValue, &visits)
-      rc.Close()
-
-      for _, v0 := range visits.Visits {
-        var v Visit = v0
-
-        vID := strconv.Itoa(v.ID)
-        hlVisits[vID] = []byte(toJson(v))
-        hlVisitsData[vID] = &v
-
-        userId := strconv.Itoa(v.User)
-        hlVisitsByUser[userId] = append(hlVisitsByUser[userId], &v)
-
-        locId := strconv.Itoa(v.Location)
-        hlVisitsByLoc[locId] = append(hlVisitsByLoc[locId], &v)
-      }
-
-      println("Loaded visits: " + strconv.Itoa(len(visits.Visits)))
+      go LoadVisitsFile(f, start)
     }
   }
-
-  elapsed := time.Since(start)
-  log.Printf("LoadVisits took %s", elapsed)
 }
 
 func main () {
