@@ -423,7 +423,7 @@ func LocationsHandlerGETAvg(ctx *fasthttp.RequestCtx, lid int) (int, []byte) {
   if cnt == 0 {
     avg = 0.0
   } else {
-    avg = (float64(total) / float64(cnt)) + 0.00005
+    avg = (float64(total) / float64(cnt)) + 0.000005
   }
   return 200, []byte("{\"avg\": " + strconv.FormatFloat(avg, 'f', 5, 64) + "}")
 }
